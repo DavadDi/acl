@@ -117,6 +117,7 @@ int fiber_uring_write(FILE_EVENT *fe, const char *buf, int len)
     if (!error_again(_err)) {                                                \
         return -1;                                                           \
     }                                                                        \
+    (_fe)->retry++;                                                          \
     if (wait_write(_fe) == -1) {                                             \
         return -1;                                                           \
     }                                                                        \
@@ -167,6 +168,7 @@ ssize_t fiber_write(FILE_EVENT *fe, const void *buf, size_t count)
 	}
 
 	CHECK_SET_NBLOCK(fe->fd);
+	fe->retry = 0;
 
 	while (1) {
 		ssize_t n = (*sys_write)(fe->fd, buf, count);
@@ -213,6 +215,7 @@ ssize_t fiber_writev(FILE_EVENT *fe, const struct iovec *iov, int iovcnt)
 	}
 
 	CHECK_SET_NBLOCK(fe->fd);
+	fe->retry = 0;
 
 	while (1) {
 		int n = (int) (*sys_writev)(fe->fd, iov, iovcnt);
@@ -260,6 +263,7 @@ ssize_t fiber_send(FILE_EVENT *fe, const void *buf, size_t len, int flags)
 	}
 
 	CHECK_SET_NBLOCK(fe->fd);
+	fe->retry = 0;
 
 	while (1) {
 #ifdef SYS_WIN
@@ -313,6 +317,7 @@ ssize_t fiber_sendto(FILE_EVENT *fe, const void *buf, size_t len,
 	}
 
 	CHECK_SET_NBLOCK(fe->fd);
+	fe->retry = 0;
 
 	while (1) {
 #ifdef SYS_WIN
@@ -366,6 +371,7 @@ ssize_t fiber_sendmsg(FILE_EVENT *fe, const struct msghdr *msg, int flags)
 	}
 
 	CHECK_SET_NBLOCK(fe->fd);
+	fe->retry = 0;
 
 	while (1) {
 		ssize_t n = (*sys_sendmsg)(fe->fd, msg, flags);
@@ -391,6 +397,7 @@ int fiber_sendmmsg(FILE_EVENT *fe, struct mmsghdr *msgvec, unsigned int vlen,
 	}
 
 	CHECK_SET_NBLOCK(fe->fd);
+	fe->retry = 0;
 
 	while (1) {
 		ssize_t n = (*sys_sendmmsg)(fe->fd, msgvec, vlen, flags);

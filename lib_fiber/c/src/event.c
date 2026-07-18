@@ -422,6 +422,12 @@ int event_add_read(EVENT *ev, FILE_EVENT *fe, event_proc *proc)
 
 int event_add_write(EVENT *ev, FILE_EVENT *fe, event_proc *proc)
 {
+	if (fe->retry >= 50) {
+		// Avoid loop unlimited in CHECK_WRITE_RESULT when EAGAIN got.
+		fe->type  = TYPE_NONE;
+		fe->retry = 0;
+	}
+
 	if (fe->type == TYPE_NONE) {
 		int ret = event_checkfd(ev, fe);
 		if (ret <= 0) {
