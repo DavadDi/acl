@@ -350,6 +350,12 @@ static int check_write_wait(EVENT *ev, FILE_EVENT *fe)
 
 int event_add_read(EVENT *ev, FILE_EVENT *fe, event_proc *proc)
 {
+	if (fe->retry >= 50) {
+		// Avoid loop unlimited in FIBER_READ when EAGAIN got.
+		fe->type  = TYPE_NONE;
+		fe->retry = 0;
+	}
+
 	if (fe->type == TYPE_NONE) {
 		int ret = event_checkfd(ev, fe);
 		if (ret <= 0) {
@@ -362,21 +368,21 @@ int event_add_read(EVENT *ev, FILE_EVENT *fe, event_proc *proc)
 	if (!(fe->type & TYPE_EVENTABLE)) {
 		if (fe->type & TYPE_FILE) {
 			return 0;
-		} else if (fe->type & TYPE_BADFD) {
+		}
+		if (fe->type & TYPE_BADFD) {
 #ifdef SYS_UNIX
 			acl_fiber_set_error(EBADF);
 #endif
 			msg_error("%s(%d): invalid fd=%d", __FUNCTION__,
 				__LINE__, (int) fe->fd);
 			return -1;
-		} else {
-#ifdef SYS_UNIX
-			acl_fiber_set_error(EINVAL);
-#endif
-			msg_error("%s(%d): invalid type=%d, fd=%d",
-				__FUNCTION__, __LINE__, fe->type, (int) fe->fd);
-			return -1;
 		}
+#ifdef SYS_UNIX
+		acl_fiber_set_error(EINVAL);
+#endif
+		msg_error("%s(%d): invalid type=%d, fd=%d",
+			__FUNCTION__, __LINE__, fe->type, (int) fe->fd);
+		return -1;
 	}
 
 	if (fe->fd >= (socket_t) ev->setsize) {

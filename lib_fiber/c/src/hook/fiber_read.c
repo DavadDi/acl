@@ -191,7 +191,8 @@ int fiber_iocp_read(FILE_EVENT *fe, char *buf, int len)
 
 #else
 
-# define FIBER_READ(_fn, _fe, _args...) do {                                 \
+# define FIBER_READ(_fn, _fe, _args...) (_fe)->retry = 0;                    \
+do {                                                                         \
     ssize_t ret;                                                             \
     int err;                                                                 \
     if (IS_READABLE((_fe))) {                                                \
@@ -221,6 +222,7 @@ int fiber_iocp_read(FILE_EVENT *fe, char *buf, int len)
         return -1;                                                           \
     }                                                                        \
     CLR_READING((_fe));                                                      \
+    (_fe)->retry++;                                                          \
 } while (1)
 
 #endif

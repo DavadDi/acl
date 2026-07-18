@@ -526,7 +526,8 @@ int fiber_wait_read(FILE_EVENT *fe)
 		event_del_read(__thread_local->event, fe, 1);
 		acl_fiber_set_error(curr->errnum);
 		return -1;
-	} else if (curr->flag & FIBER_F_TIMER) {
+	}
+	if (curr->flag & FIBER_F_TIMER) {
 		// If the IO reading timeout set in setsockopt.
 		// Clear FIBER_F_TIMER flag been set in wakeup_timers.
 		curr->flag &= ~FIBER_F_TIMER;
