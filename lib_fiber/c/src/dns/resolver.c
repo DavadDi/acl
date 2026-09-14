@@ -2,6 +2,7 @@
 
 #include "fiber/fiber_define.h"
 #include "fiber/fiber_hook.h"
+#include "fiber/fiber_base.h"
 
 #ifndef SYS_UNIX
 #include "common/pthread_patch.h"
@@ -393,7 +394,7 @@ static unsigned short get_next_qid(void)
 
 static int __wait_timeout = 5000;
 
-static int udp_request(const char *ip, unsigned short port,
+static int udp_request_once(const char *ip, unsigned short port,
 	const char *data, size_t dlen, char *buf, size_t size)
 {
 	int ret;
@@ -428,9 +429,11 @@ static int udp_request(const char *ip, unsigned short port,
 	}
 
 	if (read_wait(sock, __wait_timeout) < 0) {
+		int error = acl_fiber_last_error();
 		acl_fiber_close(sock);
 		msg_warn("%s(%d), %s: read timeout",
 			__FILE__, __LINE__, __FUNCTION__);
+		acl_fiber_set_error(error);
 		return -1;
 	}
 
@@ -451,6 +454,40 @@ static int udp_request(const char *ip, unsigned short port,
 		return -1;
 	}
 	return ret;
+}
+
+/* Retry transport failures only. A received DNS response (including NXDOMAIN)
+ * belongs to the DNS parser and must not trigger UDP retransmission here.
+ * Each attempt owns a fresh socket; the existing nameserver failover remains.
+ */
+static int udp_request(const char *ip, unsigned short port,
+	const char *data, size_t dlen, char *buf, size_t size)
+{
+	int attempt;
+	for (attempt = 0; attempt < 3; attempt++) {
+		int ret = udp_request_once(ip, port, data, dlen, buf, size);
+		int error;
+		if (ret >= 0) {
+			return ret;
+		}
+		error = acl_fiber_last_error();
+#ifdef SYS_WIN
+		if (error != WSAETIMEDOUT && error != WSAEWOULDBLOCK
+			&& error != WSAEINTR) {
+#else
+		if (error != ETIMEDOUT && error != EAGAIN && error != EINTR) {
+#endif
+			return ret;
+		}
+		if (attempt == 2) {
+			return ret;
+		}
+		msg_warn("DNS UDP retry: server=%s:%u attempt=%d/3 error=%d",
+			ip, (unsigned int) port, attempt + 2, error);
+		/* Cooperative backoff, also prevents a busy loop on EAGAIN/EINTR. */
+		acl_fiber_delay((size_t) (100 * (attempt + 1)));
+	}
+	return -1;
 }
 
 static struct addrinfo * rfc1035_to_addrinfo(const RFC1035_MESSAGE *message,
